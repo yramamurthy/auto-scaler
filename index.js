@@ -36,9 +36,12 @@ async function getConfig(fireDate) {
         plans = await dbo.collection("plans").find({}).toArray()
         plans.sort((a, b) => a.time > b.time)
         formations = await dbo.collection("formations").find({}).toArray()
-        appPlans = await dbo.collection("app_plans").find({}).toArray()
+        appPlans = await dbo.collection("app_plans").find({enabled: true}).toArray()
         holidays = await dbo.collection("market_holidays").find({year}).toArray()
         holidaysForYear = holidays.find(item=>item.year==year)
+
+        if (holidaysForYear.holidays.includes(date))
+            console.log('Market holiday today')
 
         // frame the flight schedules based on the configuraton
         appPlans.forEach(appPlan=>{
