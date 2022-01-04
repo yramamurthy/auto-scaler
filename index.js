@@ -52,6 +52,7 @@ async function getConfig(fireDate) {
                 }
             })
         })
+        console.log(`formations - ${JSON.stringify(formations)}\nplans - ${JSON.stringify(plans)}\nappPlans - ${JSON.stringify(appPlans)}\nholidays - ${holidaysForYear.holidays}`)
     } catch (e) {
         console.error(e)
     } finally {
