@@ -42,7 +42,7 @@ async function getConfig(fireDate) {
 
         // frame the flight schedules based on the configuraton
         appPlans.forEach(appPlan=>{
-            appPlan.plannedFormation=Array.from({length: 24*60}, (_, i) => 0)
+            appPlan.plannedFormation=Array.from({length: 24*60}, (_, i) => appPlan.default_formation)
             appPlan.plans.forEach(plan=>{
                 planDetail=plans.find(item=>item.id==plan && item.days.includes(weekDay) && !holidaysForYear.holidays.includes(date))
                 if (planDetail) {
