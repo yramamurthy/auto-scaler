@@ -1,0 +1,22 @@
+{
+  "name": "auto-scaler",
+  "version": "1.0.0",
+  "description": "Auto scaler to start/stop Heroku dynos based on user configuration and market holiday(s)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run auto-scaler",
+    "start:debug": "node --inspect-brk=5858 ./index.js",
+    "stage": "pm2 start ./api.js",
+    "nodemon": "nodemon --exec npm run auto-scaler",
+    "auto-scaler": "node ./index.js"
+  },
+  "author": "Yuvaraj Ramamurthy",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.2",
+    "heroku-client": "^3.1.0",
+    "mongodb": "^4.2.2",
+    "node-schedule": "^2.1.0"
+  }
+}
