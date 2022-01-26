@@ -4,7 +4,6 @@ const schedule = require('node-schedule')
 const express = require('express')
 
 // initialize environment variables
-const token = process.env.HEROKU_API_TOKEN
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
 const port = process.env.PORT || 3000
@@ -26,6 +25,9 @@ async function getConfig(fireDate) {
     const weekDay = dayOfWeek[fireDate.getDay()]
     const year = fireDate.getFullYear()
     const date = fireDate.toISOString().slice(0, 10)
+
+    appPlans = []
+    formations = []
 
     try {
         // Connect to the MongoDB cluster
@@ -94,17 +96,22 @@ async function autoScale(fireDate) {
         let heroku
 
         try {
-            // platform 
-            if (appPlans[appPlan].platform.name == 'heroku') {
-                heroku = new Heroku({ token: appPlans[appPlan].platform.token })
-            }
-            else {
-                console.log(`undefined platform for the app - ${appPlans[appPlan].platform.name}`)
+            // check for platform 
+            if (appPlans[appPlan].platform === undefined || appPlans[appPlan].platform.name === undefined) {
+                console.log(`undefined platform ${appPlans[appPlan].platform.name} for the app ${appPlans[appPlan].app_name}`)
                 continue
+            }
+            // is the platform known ?
+            if (!appPlans[appPlan].platform.name in ['heroku']) {
+                console.log(`unknown platform ${appPlans[appPlan].platform.name} for the app ${appPlans[appPlan].app_name}`)
+                continue
+            }
+            if (appPlans[appPlan].platform.name === 'heroku' && !appPlans[appPlan].platform.instance) {
+                appPlans[appPlan].platform.instance = new Heroku({ token: appPlans[appPlan].platform.token })
             }
 
             // fetch the current formation for the configured application
-            let currentFormation = await getFormation(heroku, appPlans[appPlan].app_name)
+            let currentFormation = await getFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name)
 
             // fetch the planned formation for the current minute
             let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
@@ -114,23 +121,23 @@ async function autoScale(fireDate) {
                 plannedFormation.size != currentFormation.size ||
                 plannedFormation.quantity != currentFormation.quantity) {
                 // set the new formation
-                setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
+                setFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, plannedFormation)
                 // log the changes
                 console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
                 console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
                 console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
             }
         } catch (e) {
-            console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)}`)
+            console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)} - ${e}`)
         }
     }
 }
 
 async function main() {
     // sanity checks
-    if (!token || !uri || !dbName || !port) {
+    if (!uri || !dbName || !port) {
         console.log(`Couldn't start the application. Contact your admin!`)
-        console.debug(`token - ${token}, uri - ${uri}, db - ${dbName}, port - ${port}`)
+        console.debug(` uri - ${uri}, db - ${dbName}, port - ${port}`)
         return
     }
 
@@ -143,12 +150,12 @@ async function main() {
 
     // daily job
     const job1 = schedule.scheduleJob('3 0 * * *', function (fireDate) {
-        getConfig(fireDate).catch(console.error);
+        getConfig(fireDate).catch(console.error)
     })
 
     // minute job
     const job2 = schedule.scheduleJob('*/1 * * * *', function (fireDate) {
-        autoScale(fireDate)
+        autoScale(fireDate).catch(console.error)
     })
 }
 
