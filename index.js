@@ -93,8 +93,7 @@ async function autoScale(fireDate) {
 
     // loop through the applications configured to auto scale
     for (let appPlan in appPlans) {
-        let heroku
-
+        console.log(`platform ${appPlans[appPlan].platform.name} for the app ${appPlans[appPlan].app_name} token ${appPlans[appPlan].platform.token}`)
         try {
             // check for platform 
             if (appPlans[appPlan].platform === undefined || appPlans[appPlan].platform.name === undefined) {
