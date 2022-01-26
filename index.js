@@ -93,31 +93,35 @@ async function autoScale(fireDate) {
     for (let appPlan in appPlans) {
         let heroku
 
-        // platform 
-        if (appPlans[appPlan].platform.name == 'heroku') {
-            heroku = new Heroku({ token: appPlans[appPlan].platform.token })
-        }
-        else {
-            console.log(`undefined platform for the app - ${appPlans[appPlan].platform.name}`)
-            continue
-        }
+        try {
+            // platform 
+            if (appPlans[appPlan].platform.name == 'heroku') {
+                heroku = new Heroku({ token: appPlans[appPlan].platform.token })
+            }
+            else {
+                console.log(`undefined platform for the app - ${appPlans[appPlan].platform.name}`)
+                continue
+            }
 
-        // fetch the current formation for the configured application
-        let currentFormation = await getFormation(heroku, appPlans[appPlan].app_name)
+            // fetch the current formation for the configured application
+            let currentFormation = await getFormation(heroku, appPlans[appPlan].app_name)
 
-        // fetch the planned formation for the current minute
-        let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
+            // fetch the planned formation for the current minute
+            let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
 
-        // check if the planned formation differ from the current formation
-        if (plannedFormation.type != currentFormation.type ||
-            plannedFormation.size != currentFormation.size ||
-            plannedFormation.quantity != currentFormation.quantity) {
-            // set the new formation
-            setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
-            // log the changes
-            console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
-            console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
-            console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+            // check if the planned formation differ from the current formation
+            if (plannedFormation.type != currentFormation.type ||
+                plannedFormation.size != currentFormation.size ||
+                plannedFormation.quantity != currentFormation.quantity) {
+                // set the new formation
+                setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
+                // log the changes
+                console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
+                console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+                console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+            }
+        } catch (e) {
+            console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)}`)
         }
     }
 }
