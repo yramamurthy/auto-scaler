@@ -12,20 +12,20 @@ const port = process.env.PORT || 3000
 // health check endpoint
 const app = express()
 app.get('/health', function (req, res) {
-    res.json({health: 'OK'})
+    res.json({ health: 'OK' })
 })
 
 // global variables and constants
 let appPlans = []
 let formations = []
 
-const dayOfWeek=['SUN','MON','TUE','WED', 'THU', 'FRI', 'SAT']
+const dayOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
 async function getConfig(fireDate) {
     const client = new MongoClient(uri);
     const weekDay = dayOfWeek[fireDate.getDay()]
     const year = fireDate.getFullYear()
-    const date = fireDate.toISOString().slice(0,10)
+    const date = fireDate.toISOString().slice(0, 10)
 
     try {
         // Connect to the MongoDB cluster
@@ -36,9 +36,9 @@ async function getConfig(fireDate) {
         plans = await dbo.collection("plans").find({}).toArray()
         plans.sort((a, b) => a.time > b.time)
         formations = await dbo.collection("formations").find({}).toArray()
-        appPlans = await dbo.collection("app_plans").find({enabled: true}).toArray()
-        holidays = await dbo.collection("market_holidays").find({year}).toArray()
-        holidaysForYear = holidays.find(item=>item.year==year)
+        appPlans = await dbo.collection("app_plans").find({ enabled: true }).toArray()
+        holidays = await dbo.collection("market_holidays").find({ year }).toArray()
+        holidaysForYear = holidays.find(item => item.year == year)
 
         if (holidaysForYear.holidays.includes(date))
             console.log(`Market holiday today(${date})`)
@@ -46,14 +46,14 @@ async function getConfig(fireDate) {
             console.log(`Not a market holiday today(${date})`)
 
         // frame the flight schedules based on the configuraton
-        appPlans.forEach(appPlan=>{
-            appPlan.plannedFormation=Array.from({length: 24*60}, (_, i) => appPlan.default_formation)
-            appPlan.plans.forEach(plan=>{
-                planDetail=plans.find(item=>item.id==plan && item.days.includes(weekDay) && !holidaysForYear.holidays.includes(date))
+        appPlans.forEach(appPlan => {
+            appPlan.plannedFormation = Array.from({ length: 24 * 60 }, (_, i) => appPlan.default_formation)
+            appPlan.plans.forEach(plan => {
+                planDetail = plans.find(item => item.id == plan && item.days.includes(weekDay) && !holidaysForYear.holidays.includes(date))
                 if (planDetail) {
-                    splitTime=planDetail.time.split(":")
-                    index=parseInt(splitTime[0])*60+parseInt(splitTime[1])
-                    for (var i=index;i<24*60;i++) appPlan.plannedFormation[i]=planDetail.formation
+                    splitTime = planDetail.time.split(":")
+                    index = parseInt(splitTime[0]) * 60 + parseInt(splitTime[1])
+                    for (var i = index; i < 24 * 60; i++) appPlan.plannedFormation[i] = planDetail.formation
                 }
             })
         })
@@ -70,7 +70,7 @@ async function getFormation(platform, appName) {
     return formations[0]
 }
 
-async function setFormation(platform,appName, formation) {
+async function setFormation(platform, appName, formation) {
     return await platform.patch(`/apps/${appName}/formation`, {
         body: {
             updates: [
@@ -84,37 +84,40 @@ async function setFormation(platform,appName, formation) {
     })
 }
 
-async function autoScale(fireDate) {    
+async function autoScale(fireDate) {
     var minutes = fireDate.getMinutes()
     var hour = fireDate.getHours()
     var index = hour * 60 + minutes
 
     // loop through the applications configured to auto scale
     for (let appPlan in appPlans) {
-        let heroku;
+        let heroku
+
         // platform 
-        if (appPlans[appPlan].platform.name == 'heroku')
-            heroku = new Heroku({ token:  appPlans[appPlan].platform.token })
-        else
+        if (appPlans[appPlan].platform.name == 'heroku') {
+            heroku = new Heroku({ token: appPlans[appPlan].platform.token })
+        }
+        else {
             console.log(`undefined platform for the app - ${appPlans[appPlan].platform.name}`)
             continue
+        }
 
         // fetch the current formation for the configured application
         let currentFormation = await getFormation(heroku, appPlans[appPlan].app_name)
-        
+
         // fetch the planned formation for the current minute
-        let plannedFormation = formations.find(item=>item.id==appPlans[appPlan].plannedFormation[index])
+        let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
 
         // check if the planned formation differ from the current formation
         if (plannedFormation.type != currentFormation.type ||
             plannedFormation.size != currentFormation.size ||
             plannedFormation.quantity != currentFormation.quantity) {
-                // set the new formation
-                setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
-                // log the changes
-                console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
-                console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
-                console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+            // set the new formation
+            setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
+            // log the changes
+            console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
+            console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+            console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
         }
     }
 }
