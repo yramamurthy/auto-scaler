@@ -18,7 +18,7 @@ app.get('/health', function (req, res) {
 // global variables and constants
 let appPlans = []
 let formations = []
-const heroku = new Heroku({ token:  token })
+
 const dayOfWeek=['SUN','MON','TUE','WED', 'THU', 'FRI', 'SAT']
 
 async function getConfig(fireDate) {
@@ -65,13 +65,13 @@ async function getConfig(fireDate) {
     }
 }
 
-async function getFormation(appName) {
-    const formations = await heroku.get(`/apps/${appName}/formation`)
+async function getFormation(platform, appName) {
+    const formations = await platform.get(`/apps/${appName}/formation`)
     return formations[0]
 }
 
-async function setFormation(appName, formation) {
-    return await heroku.patch(`/apps/${appName}/formation`, {
+async function setFormation(platform,appName, formation) {
+    return await platform.patch(`/apps/${appName}/formation`, {
         body: {
             updates: [
                 {
@@ -91,8 +91,16 @@ async function autoScale(fireDate) {
 
     // loop through the applications configured to auto scale
     for (let appPlan in appPlans) {
+        let heroku;
+        // platform 
+        if (appPlans[appPlan].platform.name == 'heroku')
+            heroku = new Heroku({ token:  appPlans[appPlan].platform.token })
+        else
+            console.log(`undefined platform for the app - ${appPlans[appPlan].platform.name}`)
+            continue
+
         // fetch the current formation for the configured application
-        let currentFormation = await getFormation(appPlans[appPlan].app_name)
+        let currentFormation = await getFormation(heroku, appPlans[appPlan].app_name)
         
         // fetch the planned formation for the current minute
         let plannedFormation = formations.find(item=>item.id==appPlans[appPlan].plannedFormation[index])
@@ -102,7 +110,7 @@ async function autoScale(fireDate) {
             plannedFormation.size != currentFormation.size ||
             plannedFormation.quantity != currentFormation.quantity) {
                 // set the new formation
-                setFormation(appPlans[appPlan].app_name, plannedFormation)
+                setFormation(heroku, appPlans[appPlan].app_name, plannedFormation)
                 // log the changes
                 console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
                 console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
