@@ -41,7 +41,9 @@ async function getConfig(fireDate) {
         holidaysForYear = holidays.find(item=>item.year==year)
 
         if (holidaysForYear.holidays.includes(date))
-            console.log('Market holiday today')
+            console.log(`Market holiday today(${date})`)
+        else
+            console.log(`Not a market holiday today(${date})`)
 
         // frame the flight schedules based on the configuraton
         appPlans.forEach(appPlan=>{
@@ -125,7 +127,7 @@ async function main() {
     getConfig(now).catch(console.error)
 
     // daily job
-    const job1 = schedule.scheduleJob('0 0 * * *', function (fireDate) {
+    const job1 = schedule.scheduleJob('3 0 * * *', function (fireDate) {
         getConfig(fireDate).catch(console.error);
     })
 
