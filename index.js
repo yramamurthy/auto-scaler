@@ -2,7 +2,7 @@ const { MongoClient } = require('mongodb')
 const Heroku = require('heroku-client')
 const schedule = require('node-schedule')
 const express = require('express')
-
+const moment = require('moment')
 // initialize environment variables
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
@@ -19,12 +19,16 @@ let appPlans = []
 let formations = []
 
 const dayOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+let fetchingConfig = false
 
 async function getConfig(fireDate) {
+    fetchingConfig = true
+
     const client = new MongoClient(uri);
     const weekDay = dayOfWeek[fireDate.getDay()]
     const year = fireDate.getFullYear()
-    const date = fireDate.toISOString().slice(0, 10)
+    const date = moment(fireDate).local().format('YYYY-MM-DD') // fireDate.toISOString().slice(0, 10)
+    console.log(`fireDate = ${fireDate}, date=${date}`)
 
     appPlans = []
     formations = []
@@ -65,6 +69,7 @@ async function getConfig(fireDate) {
     } finally {
         await client.close()
     }
+    fetchingConfig = false
 }
 
 async function getFormation(platform, appName) {
@@ -87,6 +92,10 @@ async function setFormation(platform, appName, formation) {
 }
 
 async function autoScale(fireDate) {
+    if (fetchingConfig) {
+        console.log('Confguration is getting updated. Skipping the autoscale process...')
+        return
+    }
     var minutes = fireDate.getMinutes()
     var hour = fireDate.getHours()
     var index = hour * 60 + minutes
