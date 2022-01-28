@@ -157,7 +157,7 @@ async function main() {
     getConfig(now).catch(console.error)
 
     // daily job
-    const job1 = schedule.scheduleJob('3 0 * * *', function (fireDate) {
+    const job1 = schedule.scheduleJob('0 0 * * *', function (fireDate) {
         getConfig(fireDate).catch(console.error)
     })
 
