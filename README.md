@@ -12,7 +12,6 @@ Following variables should be set for the application to work properly.
 
 |Variable|Description|
 |---|---|
-|HEROKU_API_TOKEN|Token to call Heroku platform services|
 |DATABASE_URL|URI of the database where user configuration and market holidays are persisted|
 |DATABASE_NAME|Name of the database where user configuration and market holidays are persisted|
 |TZ|Timezone to be used for scaling purposes|
