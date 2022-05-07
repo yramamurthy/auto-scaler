@@ -111,7 +111,7 @@ async function autoRestart(platform, appName, apiKey) {
             restartDyno(platform, appName)
         }
     } catch (error) {
-        console.error(error);
+        // console.error(error);
     }
 }
 
