@@ -143,9 +143,6 @@ async function autoScale(fireDate) {
             }
             if (appPlans[appPlan].platform.name === 'heroku' && !appPlans[appPlan].platform.instance) {
                 appPlans[appPlan].platform.instance = new Heroku({ token: appPlans[appPlan].platform.token })
-                // trigger restart check for the application
-                if (appPlans[appPlan].restart.enabled === true)
-                    autoRestart(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
             }
 
             // fetch the current formation for the configured application
@@ -165,6 +162,11 @@ async function autoScale(fireDate) {
                 console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
                 console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
             }
+
+            // trigger restart check for the application
+            if (appPlans[appPlan].restart.enabled === true)
+                autoRestart(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
+
         } catch (e) {
             console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)} - ${e}`)
         }
