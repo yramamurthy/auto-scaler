@@ -77,7 +77,9 @@ async function getConfig(fireDate) {
 
 async function getFormation(platform, appName) {
     const formations = await platform.get(`/apps/${appName}/formation`)
-    return formations[0]
+    const formation = formations.find(item=>item.type=='web')
+    // console.log(formation)
+    return formation
 }
 
 async function setFormation(platform, appName, formation) {
@@ -106,6 +108,7 @@ async function autoRestart(platform, appName, apiKey) {
     let response;
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
+        console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
         if (response.data.flag) {
             console.log(`restart flag detected for ${appName} - ${response.data.flag}. Restarting...`)
             restartDyno(platform, appName)
