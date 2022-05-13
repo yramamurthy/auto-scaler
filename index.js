@@ -6,10 +6,35 @@ const moment = require('moment')
 const axios = require('axios').default;
 require('dotenv').config()
 
+const { pushMetrics, pushTimeseries } = require('prometheus-remote-write')
+
 // initialize environment variables
+const promURI = process.env.PROMETHEUS_ENDPOINT
+const userName = process.env.PROMETHEUS_USERNAME
+const password = process.env.PROMETHEUS_PASSWORD
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
 const port = process.env.PORT || 3000
+
+const config = {
+    // Remote url
+    url: promURI,
+    // Auth settings
+    auth: {
+      username: userName,
+      password: password,
+    },
+    // Optional prometheus protocol descripton .proto/.json
+    proto: undefined,
+    // Logging & debugging, disabled by default
+    console: undefined,
+    verbose: false,
+    timing: false,
+    // Override used node-fetch
+    fetch: undefined,
+    // Additional labels to apply to each timeseries, i.e. [{ service: "SQS" }]
+    labels: undefined
+  };
 
 // health check endpoint
 const app = express()
@@ -109,6 +134,9 @@ async function autoRestart(platform, appName, apiKey) {
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
         console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
+        const field=`${appName}_restart_flag`.replace("-","_")
+        const metrics = {[field]: response.data.flag?1:0}
+        pushMetrics(metrics, config)
         if (response.data.flag) {
             console.log(`restart flag detected for ${appName} - ${response.data.flag}. Restarting...`)
             restartDyno(platform, appName)
