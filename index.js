@@ -102,6 +102,7 @@ async function getConfig(fireDate) {
     fetchingConfig = false
 }
 
+// Heroku APIs
 async function getFormation(platform, appName) {
     const formations = await platform.get(`/apps/${appName}/formation`)
     const formation = formations.find(item=>item.type=='web')
@@ -130,13 +131,78 @@ async function restartDyno(platform, appName) {
     })
 }
 
+// Digital Ocean APIs
 async function getAppId(platform, appName) {
-    const apps = await platform.app.listApps({})
-    console.log(apps)
+    let appId=null
+    const {data:{apps}} = await platform.app.listApps({})
+    if (apps) {
+        const app = apps.find(item => item.spec.name == appName)
+        if (app) {
+            appId=app.id
+        }
+    }
+    return appId
 }
 
-async function autoRestart(platformName, platform, appName, apiKey) {
-    url = `https://${appName}.herokuapp.com/restart`
+async function createApp(platform, appName, appSpec) {
+    console.log(`creating app ${appName} in digitalocean...`)
+    const {data:{app}} = await platform.app.createApp(appSpec);
+    return app
+}
+
+async function deleteApp(platform, appName) {
+    console.log(`deleting app ${appName} in digitalocean...`)
+    const appId=await getAppId(platform, appName)
+    if (appId == null) {
+        console.log(`${appName} doesn't exist!`)
+        return
+    }
+    const input = {
+        app_id: appId
+      };
+    const {status} = await platform.app.deleteApp(input);
+    return status
+}
+
+async function getRunningAppDeployments(platform, appId) {
+    const input = {
+        app_id: appId
+      };
+    const {data:{deployments}} = await platform.app.listAppDeployments(input);
+    const runningDeployments = deployments.filter(item=>item.phase != 'ACTIVE' && item.phase != 'CANCELED' && item.phase != 'SUPERSEDED')
+    return runningDeployments.length
+
+}
+
+async function updateApp(platform, appName, appSpec) {
+    let input = appSpec;
+    let app = null;
+    input.app_id = await getAppId(platform, appName);
+    input.spec.services[0].envs.push({
+        "key": "DUMMY",
+        "value": `${Math.random()}`,
+        "type": "GENERAL"
+    })
+    
+    if (input.app_id == null) {
+        console.log(`${appName} doesn't exist!`)
+        return
+    }
+    const runningDeployments = await getRunningAppDeployments(platform, input.app_id)
+    if (runningDeployments == 0) {
+        console.log(`updateApp ${appName} at digitalocean...`)
+        data = await platform.app.updateApp(input);
+        if (data)
+            app = data.app
+    } else {
+        console.log(`updateApp ${appName} at digitalocean already in progress...`)
+    }
+    return app
+}
+
+// Common Restart function
+async function autoRestart(platformName, platform, appName, appDomain, apiKey, appSpec) {
+    url = `${appDomain}restart`
     let response;
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
@@ -150,7 +216,7 @@ async function autoRestart(platformName, platform, appName, apiKey) {
                 restartDyno(platform, appName)
             }
             if (platformName == 'dots') {
-                getAppId(platform, appName)
+                updateApp(platform, appName, appSpec)
             }
         }
     } catch (error) {
@@ -211,13 +277,24 @@ async function autoScale(fireDate) {
             if (appPlans[appPlan].platform.name === 'dots') {
                 // fetch the planned formation for the current minute
                 let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
-                console.log(`planned formation for ${appPlans[appPlan].app_name} is ${plannedFormation}`)
-
+                let appId=await getAppId(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name)
+                if (plannedFormation.quantity == 0 && appId) {
+                    // updateApp(appPlans[appPlan].platform.instance,appPlans[appPlan].app_name, appPlans[appPlan].app_spec)
+                    deleteApp(appPlans[appPlan].platform.instance,appPlans[appPlan].app_name)
+                } else if (plannedFormation.quantity == 1 && !appId) {
+                    createApp(appPlans[appPlan].platform.instance,appPlans[appPlan].app_name, appPlans[appPlan].app_spec)
+                }
             }
 
             // trigger restart check for the application
             if (appPlans[appPlan].restart.enabled === true)
-                autoRestart(appPlans[appPlan].platform.name, appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
+                autoRestart(
+                    appPlans[appPlan].platform.name, 
+                    appPlans[appPlan].platform.instance, 
+                    appPlans[appPlan].app_name,
+                    appPlans[appPlan].restart.app_domain, 
+                    appPlans[appPlan].restart.api_key,
+                    appPlans[appPlan].app_spec)
 
         } catch (e) {
             console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)} - ${e}`)
