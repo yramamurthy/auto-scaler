@@ -8,13 +8,35 @@ const {createApiClient} = require('dots-wrapper');
 
 require('dotenv').config()
 
+const { pushMetrics, pushTimeseries } = require('prometheus-remote-write')
+
 // initialize environment variables
+const promURI = process.env.PROMETHEUS_ENDPOINT
+const userName = process.env.PROMETHEUS_USERNAME
+const password = process.env.PROMETHEUS_PASSWORD
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
 const port = process.env.PORT || 3000
 
-const myApiToken = 'my-long-token';
-const dots = 
+const config = {
+    // Remote url
+    url: promURI,
+    // Auth settings
+    auth: {
+      username: userName,
+      password: password,
+    },
+    // Optional prometheus protocol descripton .proto/.json
+    proto: undefined,
+    // Logging & debugging, disabled by default
+    console: undefined,
+    verbose: false,
+    timing: false,
+    // Override used node-fetch
+    fetch: undefined,
+    // Additional labels to apply to each timeseries, i.e. [{ service: "SQS" }]
+    labels: undefined
+  };
 
 // health check endpoint
 const app = express()
@@ -82,7 +104,9 @@ async function getConfig(fireDate) {
 
 async function getFormation(platform, appName) {
     const formations = await platform.get(`/apps/${appName}/formation`)
-    return formations[0]
+    const formation = formations.find(item=>item.type=='web')
+    // console.log(formation)
+    return formation
 }
 
 async function setFormation(platform, appName, formation) {
@@ -106,18 +130,28 @@ async function restartDyno(platform, appName) {
     })
 }
 
+async function getAppId(platform, appName) {
+    const apps = await platform.app.listApps({})
+    console.log(apps)
+}
+
 async function autoRestart(platformName, platform, appName, apiKey) {
     url = `https://${appName}.herokuapp.com/restart`
     let response;
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
+        console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
+        const field=`${appName}_restart_flag`.replace("-","_")
+        const metrics = {[field]: response.data.flag?1:0}
+        pushMetrics(metrics, config)
         if (response.data.flag) {
             console.log(`restart flag detected for ${appName} - ${response.data.flag}. Restarting...`)
             if (platformName == 'heroku') {
                 restartDyno(platform, appName)
             }
-            
-            
+            if (platformName == 'dots') {
+                getAppId(platform, appName)
+            }
         }
     } catch (error) {
         // console.error(error);
@@ -149,35 +183,42 @@ async function autoScale(fireDate) {
             }
             if (appPlans[appPlan].platform.name === 'heroku' && !appPlans[appPlan].platform.instance) {
                 appPlans[appPlan].platform.instance = new Heroku({ token: appPlans[appPlan].platform.token })
-                // trigger restart check for the application
-                if (appPlans[appPlan].restart.enabled === true)
-                    autoRestart(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
             }
 
             if (appPlans[appPlan].platform.name === 'dots' && !appPlans[appPlan].platform.instance) {
                 appPlans[appPlan].platform.instance = createApiClient({token: appPlans[appPlan].platform.token});
-                // trigger restart check for the application
-                if (appPlans[appPlan].restart.enabled === true)
-                    autoRestart(appPlans[appPlan].platform.name, appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
             }
 
-            // fetch the current formation for the configured application
-            let currentFormation = await getFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name)
+            if (appPlans[appPlan].platform.name === 'heroku') {
+                // fetch the current formation for the configured application
+                let currentFormation = await getFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name)
 
-            // fetch the planned formation for the current minute
-            let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
+                // fetch the planned formation for the current minute
+                let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
 
-            // check if the planned formation differ from the current formation
-            if (plannedFormation.type != currentFormation.type ||
-                plannedFormation.size != currentFormation.size ||
-                plannedFormation.quantity != currentFormation.quantity) {
-                // set the new formation
-                setFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, plannedFormation)
-                // log the changes
-                console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
-                console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
-                console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+                // check if the planned formation differ from the current formation
+                if (plannedFormation.type != currentFormation.type ||
+                    plannedFormation.size != currentFormation.size ||
+                    plannedFormation.quantity != currentFormation.quantity) {
+                    // set the new formation
+                    setFormation(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, plannedFormation)
+                    // log the changes
+                    console.log(`current formation for ${appPlans[appPlan].app_name} is type: ${currentFormation.type}, size: ${currentFormation.size}, quantity: ${currentFormation.quantity}`)
+                    console.log(`planned formation for ${appPlans[appPlan].app_name} is type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+                    console.log(`Formation updated for ${appPlans[appPlan].app_name} to type: ${plannedFormation.type}, size: ${plannedFormation.size}, quantity: ${plannedFormation.quantity}`)
+                }
             }
+            if (appPlans[appPlan].platform.name === 'dots') {
+                // fetch the planned formation for the current minute
+                let plannedFormation = formations.find(item => item.id == appPlans[appPlan].plannedFormation[index])
+                console.log(`planned formation for ${appPlans[appPlan].app_name} is ${plannedFormation}`)
+
+            }
+
+            // trigger restart check for the application
+            if (appPlans[appPlan].restart.enabled === true)
+                autoRestart(appPlans[appPlan].platform.name, appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
+
         } catch (e) {
             console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)} - ${e}`)
         }
