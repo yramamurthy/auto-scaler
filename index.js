@@ -4,12 +4,17 @@ const schedule = require('node-schedule')
 const express = require('express')
 const moment = require('moment')
 const axios = require('axios').default;
+const {createApiClient} = require('dots-wrapper');
+
 require('dotenv').config()
 
 // initialize environment variables
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
 const port = process.env.PORT || 3000
+
+const myApiToken = 'my-long-token';
+const dots = 
 
 // health check endpoint
 const app = express()
@@ -101,14 +106,18 @@ async function restartDyno(platform, appName) {
     })
 }
 
-async function autoRestart(platform, appName, apiKey) {
+async function autoRestart(platformName, platform, appName, apiKey) {
     url = `https://${appName}.herokuapp.com/restart`
     let response;
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
         if (response.data.flag) {
             console.log(`restart flag detected for ${appName} - ${response.data.flag}. Restarting...`)
-            restartDyno(platform, appName)
+            if (platformName == 'heroku') {
+                restartDyno(platform, appName)
+            }
+            
+            
         }
     } catch (error) {
         // console.error(error);
@@ -143,6 +152,13 @@ async function autoScale(fireDate) {
                 // trigger restart check for the application
                 if (appPlans[appPlan].restart.enabled === true)
                     autoRestart(appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
+            }
+
+            if (appPlans[appPlan].platform.name === 'dots' && !appPlans[appPlan].platform.instance) {
+                appPlans[appPlan].platform.instance = createApiClient({token: appPlans[appPlan].platform.token});
+                // trigger restart check for the application
+                if (appPlans[appPlan].restart.enabled === true)
+                    autoRestart(appPlans[appPlan].platform.name, appPlans[appPlan].platform.instance, appPlans[appPlan].app_name, appPlans[appPlan].restart.api_key)
             }
 
             // fetch the current formation for the configured application

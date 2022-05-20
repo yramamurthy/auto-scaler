@@ -16,6 +16,7 @@
   "dependencies": {
     "axios": "^0.27.2",
     "dotenv": "^16.0.0",
+    "dots-wrapper": "^3.7.6",
     "express": "^4.17.2",
     "heroku-client": "^3.1.0",
     "moment": "^2.29.1",
