@@ -206,7 +206,7 @@ async function autoRestart(platformName, platform, appName, appDomain, apiKey, a
     let response;
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
-        console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
+        // console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
         const field=`${appName}_restart_flag`.replace("-","_")
         const metrics = {[field]: response.data.flag?1:0}
         pushMetrics(metrics, config)
