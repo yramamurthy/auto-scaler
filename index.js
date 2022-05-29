@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 const { MongoClient } = require('mongodb')
 const Heroku = require('heroku-client')
 const schedule = require('node-schedule')
@@ -5,38 +7,12 @@ const express = require('express')
 const moment = require('moment')
 const axios = require('axios').default;
 const {createApiClient} = require('dots-wrapper');
+const {pushmetrics} = require('./metrics')
 
-require('dotenv').config()
-
-const { pushMetrics, pushTimeseries } = require('prometheus-remote-write')
-
-// initialize environment variables
-const promURI = process.env.PROMETHEUS_ENDPOINT
-const userName = process.env.PROMETHEUS_USERNAME
-const password = process.env.PROMETHEUS_PASSWORD
 const uri = process.env.DATABASE_URL
 const dbName = process.env.DATABASE_NAME
 const port = process.env.PORT || 3000
 
-const config = {
-    // Remote url
-    url: promURI,
-    // Auth settings
-    auth: {
-      username: userName,
-      password: password,
-    },
-    // Optional prometheus protocol descripton .proto/.json
-    proto: undefined,
-    // Logging & debugging, disabled by default
-    console: undefined,
-    verbose: false,
-    timing: false,
-    // Override used node-fetch
-    fetch: undefined,
-    // Additional labels to apply to each timeseries, i.e. [{ service: "SQS" }]
-    labels: undefined
-  };
 
 // health check endpoint
 const app = express()
@@ -77,9 +53,9 @@ async function getConfig(fireDate) {
         holidaysForYear = holidays.find(item => item.year == year)
 
         if (holidaysForYear.holidays.includes(date))
-            console.log(`Market holiday today(${date})`)
+            console.log(`Public holiday today(${date})`)
         else
-            console.log(`Not a market holiday today(${date})`)
+            console.log(`Not a public holiday today(${date})`)
 
         // frame the flight schedules based on the configuraton
         appPlans.forEach(appPlan => {
@@ -93,7 +69,7 @@ async function getConfig(fireDate) {
                 }
             })
         })
-        console.log(`formations - ${JSON.stringify(formations)}\nplans - ${JSON.stringify(plans)}\nappPlans - ${JSON.stringify(appPlans)}\nholidays for ${year} - ${holidaysForYear.holidays}`)
+        // console.log(`formations - ${JSON.stringify(formations)}\nplans - ${JSON.stringify(plans)}\nappPlans - ${JSON.stringify(appPlans)}\nholidays for ${year} - ${holidaysForYear.holidays}`)
     } catch (e) {
         console.error(e)
     } finally {
@@ -204,12 +180,12 @@ async function updateApp(platform, appName, appSpec) {
 async function autoRestart(platformName, platform, appName, appDomain, apiKey, appSpec) {
     url = `${appDomain}restart`
     let response;
+    let metricsData = {};
     try{
         response = await axios.get(url, {headers: {'X-API-KEY': apiKey }});
         // console.log(`Got response from ${appName} restart service : ${JSON.stringify(response.data)}`)
         const field=`${appName}_restart_flag`.replace("-","_")
-        const metrics = {[field]: response.data.flag?1:0}
-        pushMetrics(metrics, config)
+        metricsData = {[field]: response.data.flag?1:0}
         if (response.data.flag) {
             console.log(`restart flag detected for ${appName} - ${response.data.flag}. Restarting...`)
             if (platformName == 'heroku') {
@@ -222,6 +198,16 @@ async function autoRestart(platformName, platform, appName, appDomain, apiKey, a
     } catch (error) {
         // console.error(error);
     }
+    return metricsData;
+}
+
+const isMarketOpen = (index) => {
+    let marketOpen = false;
+    // 9:15 => 555
+    // 3:30 => 930
+    if (index >= 555 && index <= 930) 
+        marketOpen = true
+    return marketOpen
 }
 
 async function autoScale(fireDate) {
@@ -233,6 +219,7 @@ async function autoScale(fireDate) {
     var hour = fireDate.getHours()
     var index = hour * 60 + minutes
 
+    data = {}
     // loop through the applications configured to auto scale
     for (let appPlan in appPlans) {
         // console.log(`platform ${appPlans[appPlan].platform.name} for the app ${appPlans[appPlan].app_name} token ${appPlans[appPlan].platform.token}`)
@@ -288,7 +275,7 @@ async function autoScale(fireDate) {
 
             // trigger restart check for the application
             if (appPlans[appPlan].restart.enabled === true)
-                autoRestart(
+                m = await autoRestart(
                     appPlans[appPlan].platform.name, 
                     appPlans[appPlan].platform.instance, 
                     appPlans[appPlan].app_name,
@@ -299,7 +286,13 @@ async function autoScale(fireDate) {
         } catch (e) {
             console.log(`Exception occured while processing ${appPlans[appPlan].app_name}, platform - ${JSON.stringify(appPlans[appPlan].platform)} - ${e}`)
         }
-    }
+        for (key in m) {
+            data[key]=m[key]
+        }
+    } // appPlans
+
+    if (isMarketOpen(index)) 
+        pushmetrics(data)
 }
 
 async function main() {
