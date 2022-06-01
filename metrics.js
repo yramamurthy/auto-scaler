@@ -2,6 +2,7 @@ const { pushMetrics, pushTimeseries } = require('prometheus-remote-write')
 // const memjs = require('memjs');
 // const jpickle = require('jpickle');
 const { MongoClient } = require('mongodb')
+const moment = require('moment')
 
 // var client = memjs.Client.create(process.env.MEMCACHIER_SERVERS, {
 //   username: process.env.MEMCACHIER_USERNAME,
@@ -43,17 +44,26 @@ const pushmetrics = async (metrics) => {
         let dbo = db.db('algo_cache')
 
         // fetch the metrics
-        stats = await dbo.collection("replica").find({"key": "metrics"}).toArray()
+        stats = await dbo.collection("replica").find({
+            "key": { '$in': ['metrics_algo_dev', 'metrics_algo_stg', 'metrics_algo_prod']}
+        }).toArray()
 
-        if (stats) {
-            data=JSON.parse(stats[0].value)
+        for (stat in stats) {
+            data=JSON.parse(stats[stat].value)
+            // console.log(moment.now(), moment(stats[stat].iat).unix())
             for (key in data) {
-                if (key!='t')
+                if (key=='t')
+                    continue
+                
+                if (key=='tl')
+                    metrics[`${stats[stat].key}_tl`]=data[key]
+                else
                     metrics[key]=data[key]
             }
             
         }
         if (Object.keys(metrics).length) {
+            console.log(metrics)
             pushMetrics(metrics, config)
         } else {
             // console.log('nothing')
