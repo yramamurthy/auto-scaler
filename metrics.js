@@ -49,19 +49,18 @@ const pushmetrics = async (metrics) => {
         }).toArray()
 
         for (stat in stats) {
+            if (moment(stats[stat].iat) < moment(Date.now()))
+                continue
+            // console.log(moment(Date.now()), moment(stats[stat].iat) )
             data=JSON.parse(stats[stat].value)
-            // console.log(moment.now(), moment(stats[stat].iat).unix())
-            for (key in data) {
-                if (key=='t')
-                    continue
-                
+            for (key in data) {                
                 if (key=='tl')
                     metrics[`${stats[stat].key}_tl`]=data[key]
-                else
+                else if (!metrics['t'] || moment(data['t']) >= moment(metrics['t']))
                     metrics[key]=data[key]
             }
-            
         }
+        delete metrics['t']
         if (Object.keys(metrics).length) {
             console.log(metrics)
             pushMetrics(metrics, config)

@@ -296,6 +296,8 @@ async function autoScale(fireDate) {
 }
 
 async function main() {
+
+    pushmetrics(metrics={})
     // sanity checks
     if (!uri || !dbName || !port) {
         console.log(`Couldn't start the application. Contact your admin!`)
